@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Fondo -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:src="@drawable/fondo_1"
+        android:scaleType="centerCrop"/>
+
+    <!-- Contenedor de botones centrado -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:orientation="vertical"
+        android:padding="32dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnWatchVideo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:text="Ver Video Instructivo"
+            android:textSize="24sp"
+            app:icon="@drawable/ic_video"
+            app:backgroundTint="#DDFFFFFF"
+            android:textColor="@color/black"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnStartExercise"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Iniciar Ejercicio"
+            android:textSize="24sp"
+            app:icon="@drawable/ic_camera"
+            app:backgroundTint="#DDFFFFFF"
+            android:textColor="@color/black"/>
+    </LinearLayout>
+</RelativeLayout>
