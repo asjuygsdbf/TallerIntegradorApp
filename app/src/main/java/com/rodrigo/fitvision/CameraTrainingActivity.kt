@@ -30,7 +30,8 @@ class CameraTrainingActivity : AppCompatActivity() {
             settings.javaScriptEnabled = true
             settings.allowContentAccess = true
             settings.allowFileAccess = true
-            loadUrl("http://192.168.1.85:5000/video_stream")
+            val exercise = intent.getStringExtra("exercise") ?: "squats"
+            loadUrl("http://192.168.1.85:5000/view_stream?ejercicio=$exercise")
         }
 
         binding.btnStop.setOnClickListener {

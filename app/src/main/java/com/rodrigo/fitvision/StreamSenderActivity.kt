@@ -24,12 +24,14 @@ import java.util.concurrent.Executors
 
 class StreamSenderActivity : AppCompatActivity() {
     private lateinit var binding: ActivityCameraTrainingBinding
+    private lateinit var exercise: String
     private val scope = CoroutineScope(Dispatchers.IO)
     private val client = OkHttpClient()
     private var lastTimestamp = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        exercise = intent.getStringExtra("exercise") ?: "squats"
         binding = ActivityCameraTrainingBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -80,7 +82,7 @@ class StreamSenderActivity : AppCompatActivity() {
 
             imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
                 val now = System.currentTimeMillis()
-                if (now - lastTimestamp >= 67) { // Aproximadamente 15 fps
+                if (now - lastTimestamp >= 67) { // ~15 fps
                     val bitmap = imageProxy.toBitmapCompat()
                     sendBitmapToServer(bitmap)
                     lastTimestamp = now
@@ -113,7 +115,7 @@ class StreamSenderActivity : AppCompatActivity() {
             }
 
             val request = Request.Builder()
-                .url("http://192.168.1.85:5000/video_stream_upload")
+                .url("http://192.168.1.85:5000/video_stream_upload?ejercicio=$exercise")
                 .post(requestBody)
                 .build()
 
@@ -130,6 +132,7 @@ class StreamSenderActivity : AppCompatActivity() {
     }
 }
 
+// ✅ Esta función debe ir FUERA de la clase
 fun ImageProxy.toBitmapCompat(): Bitmap {
     val yBuffer = planes[0].buffer
     val uBuffer = planes[1].buffer
