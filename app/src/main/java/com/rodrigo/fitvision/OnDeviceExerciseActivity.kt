@@ -1,6 +1,5 @@
 package com.rodrigo.fitvision
 
-import android.graphics.Canvas
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -11,7 +10,6 @@ import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.pose.PoseDetection
 import com.google.mlkit.vision.pose.PoseDetector
-import com.google.mlkit.vision.pose.PoseDetectorOptions
 import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions
 import com.rodrigo.fitvision.core.*
 import com.rodrigo.fitvision.databinding.ActivityCameraTrainingBinding
@@ -37,13 +35,24 @@ class OnDeviceExerciseActivity : AppCompatActivity() {
         setupCamera()
 
         binding.btnStop.setOnClickListener { finish() }
+
+        // Redibuja constantemente el overlay cada 100ms
+        val handler = android.os.Handler(mainLooper)
+        val redrawRunnable = object : Runnable {
+            override fun run() {
+                binding.overlayView.invalidate()
+                handler.postDelayed(this, 100)
+            }
+        }
+        handler.post(redrawRunnable)
     }
 
     private fun initProcessors() {
         when (exercise) {
-            "pushups" -> pushupProcessor = PushUpProcessor(Thresholds.getPushUpThresholds())
+            "pushups" -> {
+            }
             "squats" -> squatProcessor = SquatProcessor(Thresholds.getSquatThresholds())
-            "abdominal" -> abdominalProcessor = AbdominalProcessor()
+            "abs" -> abdominalProcessor = AbdominalProcessor(Thresholds.getAbdominalThresholds())
         }
     }
 
@@ -60,14 +69,55 @@ class OnDeviceExerciseActivity : AppCompatActivity() {
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
 
-            poseDetector = PoseDetection.getClient(
-                AccuratePoseDetectorOptions.Builder()
-                    .setDetectorMode(PoseDetectorOptions.STREAM_MODE)
-                    .build()
-            )
+            val options = AccuratePoseDetectorOptions.Builder()
+                .setDetectorMode(AccuratePoseDetectorOptions.STREAM_MODE)
+                .build()
 
-            imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
-                processFrame(imageProxy)
+            poseDetector = PoseDetection.getClient(options)
+
+            imageAnalysis.setAnalyzer(
+                Executors.newSingleThreadExecutor()
+            ) { imageProxy ->
+                @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
+                val mediaImage = imageProxy.image
+                if (mediaImage != null) {
+                    val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                    val image = InputImage.fromMediaImage(mediaImage, rotationDegrees)
+
+                    poseDetector.process(image)
+                        .addOnSuccessListener { pose ->
+                            Log.d("POSE", "Landmarks detectados: ${pose.allPoseLandmarks.size}")
+
+                            // Obtenemos dimensiones del frame
+                            val frameWidth = image.width.toFloat()
+                            val frameHeight = image.height.toFloat()
+
+                            // Inicializar procesador con dimensiones reales
+                            if (exercise == "pushups" && pushupProcessor == null) {
+                                pushupProcessor = PushUpProcessor(
+                                    Thresholds.getPushUpThresholds(),
+                                    frameWidth,
+                                    frameHeight
+                                )
+                            }
+
+                            binding.overlayView.setDrawCallback { canvas ->
+                                when (exercise) {
+                                    "pushups" -> pushupProcessor?.process(pose, canvas)
+                                    "squats" -> squatProcessor?.process(pose, canvas)
+                                    "abs" -> abdominalProcessor?.process(pose, canvas)
+                                }
+                            }
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e("PoseDetection", "Error detecting pose", e)
+                        }
+                        .addOnCompleteListener {
+                            imageProxy.close()
+                        }
+                } else {
+                    imageProxy.close()
+                }
             }
 
             try {
@@ -79,42 +129,16 @@ class OnDeviceExerciseActivity : AppCompatActivity() {
                     imageAnalysis
                 )
             } catch (e: Exception) {
+                Log.e("CameraSetup", "Error binding camera use cases", e)
                 Toast.makeText(this, "Error al iniciar cámara", Toast.LENGTH_SHORT).show()
             }
         }, ContextCompat.getMainExecutor(this))
     }
 
-    @androidx.camera.core.ExperimentalGetImage
-    private fun processFrame(imageProxy: ImageProxy) {
-        val mediaImage = imageProxy.image ?: run {
-            imageProxy.close()
-            return
-        }
-
-        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-        poseDetector.process(image)
-            .addOnSuccessListener { pose ->
-                val bitmap = binding.previewView.bitmap ?: return@addOnSuccessListener
-                val canvas = Canvas(bitmap)
-
-                when (exercise) {
-                    "pushups" -> pushupProcessor?.process(pose, canvas)
-                    "squats" -> squatProcessor?.process(pose, canvas)
-                    "abdominal" -> abdominalProcessor?.process(pose, canvas)
-                }
-
-                binding.previewView.invalidate()
-            }
-            .addOnFailureListener {
-                it.printStackTrace()
-            }
-            .addOnCompleteListener {
-                imageProxy.close()
-            }
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        poseDetector.close()
+        if (::poseDetector.isInitialized) {
+            poseDetector.close()
+        }
     }
 }
