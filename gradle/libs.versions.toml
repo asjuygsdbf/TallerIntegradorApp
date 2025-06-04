@@ -1,5 +1,5 @@
 [versions]
-agp = "8.9.2"
+agp = "8.10.1"
 kotlin = "2.0.21"
 coreKtx = "1.16.0"
 junit = "4.13.2"
@@ -36,7 +36,12 @@ retrofit-converter-scalars = { group = "com.squareup.retrofit2", name = "convert
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+
+
 mlkitpose = { module = "com.google.mlkit:pose-detection-accurate", version.ref = "mlkitpose" }
+mlkitpose-base = { module = "com.google.mlkit:pose-detection", version.ref = "mlkitpose" }
+mlkitpose-common = { module = "com.google.mlkit:pose-detection-common", version.ref = "mlkitpose" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
