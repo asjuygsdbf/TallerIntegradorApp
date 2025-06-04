@@ -5,19 +5,17 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <WebView
-        android:id="@+id/webView"
-        android:layout_width="match_parent"
+    <!-- Vista para la cámara -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_margin="0dp"
-        android:scaleType="fitXY"
-        android:scrollbars="none"
-        android:overScrollMode="never"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@+id/btnStop"
+        app:layout_constraintBottom_toTopOf="@id/btnStop"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- Botón para detener -->
     <Button
         android:id="@+id/btnStop"
         android:layout_width="wrap_content"
@@ -27,5 +25,4 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         android:layout_marginBottom="16dp"/>
-
 </androidx.constraintlayout.widget.ConstraintLayout>

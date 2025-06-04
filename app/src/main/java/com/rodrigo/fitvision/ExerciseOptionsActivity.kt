@@ -19,7 +19,7 @@ class ExerciseOptionsActivity : AppCompatActivity() {
         }
 
         findViewById<MaterialButton>(R.id.btnStartExercise).setOnClickListener {
-            val nextActivity = if (exercise == "squats") StreamSenderActivity::class.java else CameraTrainingActivity::class.java
+            val nextActivity = OnDeviceExerciseActivity::class.java
             val intent = Intent(this, nextActivity)
             intent.putExtra("exercise", exercise)
             startActivity(intent)

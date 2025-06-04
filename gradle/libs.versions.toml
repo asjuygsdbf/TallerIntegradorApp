@@ -14,6 +14,7 @@ androidxCamera = "1.4.2"
 retrofit = "2.9.0"
 okhttp = "4.12.0"
 coroutines = "1.7.3"
+mlkitpose = "17.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -35,6 +36,7 @@ retrofit-converter-scalars = { group = "com.squareup.retrofit2", name = "convert
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+mlkitpose = { module = "com.google.mlkit:pose-detection-accurate", version.ref = "mlkitpose" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
