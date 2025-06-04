@@ -58,4 +58,7 @@ dependencies {
     implementation(libs.okhttp)
 
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.mlkitpose)
+    implementation(libs.mlkitpose.base)
+    implementation(libs.mlkitpose.common)
 }
