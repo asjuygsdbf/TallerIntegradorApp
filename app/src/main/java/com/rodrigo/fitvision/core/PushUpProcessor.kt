@@ -2,82 +2,123 @@ package com.rodrigo.fitvision.core
 
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
+import kotlin.math.*
 
-class PushUpProcessor(private val thresholds: Thresholds.ThresholdSet) {
-    private var state = "UP"
-    private var correctCount = 0
-    private var incorrectCount = 0
-    private var alertMessage = ""
+class PushUpProcessor(
+    private val thresholds: Thresholds.ThresholdSet,
+    private val frameWidth: Float = 480f,
+    private val frameHeight: Float = 640f
+) {
+    private var state = "up"
+    private var counter = 0
+    private var lastFeedback = ""
 
-    fun process(pose: Pose, canvas: Canvas?): Pair<Int, Int> {
-        val leftShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
-        val leftElbow = pose.getPoseLandmark(PoseLandmark.LEFT_ELBOW)
-        val leftWrist = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
+    private val paintText = Paint().apply {
+        color = Color.WHITE
+        textSize = 42f
+    }
 
-        val rightShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)
-        val rightElbow = pose.getPoseLandmark(PoseLandmark.RIGHT_ELBOW)
-        val rightWrist = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
+    private val paintPoint = Paint().apply {
+        color = Color.YELLOW
+        style = Paint.Style.FILL
+    }
 
-        val leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
-        val rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
+    private val paintLine = Paint().apply {
+        color = Color.GREEN
+        strokeWidth = 6f
+        style = Paint.Style.STROKE
+    }
 
-        val leftAnkle = pose.getPoseLandmark(PoseLandmark.LEFT_ANKLE)
-        val rightAnkle = pose.getPoseLandmark(PoseLandmark.RIGHT_ANKLE)
+    fun process(pose: Pose, canvas: Canvas) {
+        val landmarks = pose.allPoseLandmarks
+        if (landmarks.isEmpty()) return
 
-        if (listOf(
-                leftShoulder,
-                leftElbow,
-                leftWrist,
-                rightShoulder,
-                rightElbow,
-                rightWrist,
-                leftHip,
-                rightHip,
-                leftAnkle,
-                rightAnkle
-            ).any { it == null }) return Pair(correctCount, incorrectCount)
+        val scaleX = canvas.width / frameWidth
+        val scaleY = canvas.height / frameHeight
+        val scale = min(scaleX, scaleY)
+        val offsetY = -100f
 
-        val leftElbowAngle = Utils.calculateAngle(leftShoulder!!, leftElbow!!, leftWrist!!)
-        val rightElbowAngle = Utils.calculateAngle(rightShoulder!!, rightElbow!!, rightWrist!!)
-        val avgElbowAngle = (leftElbowAngle + rightElbowAngle) / 2
+        fun sx(lm: PoseLandmark) = canvas.width - (lm.position.x * scale)
+        fun sy(lm: PoseLandmark) = lm.position.y * scale + offsetY
 
-        val shoulderY = (leftShoulder.position.y + rightShoulder.position.y) / 2
-        val hipY = (leftHip.position.y + rightHip.position.y) / 2
-        val ankleY = (leftAnkle.position.y + rightAnkle.position.y) / 2
+        fun angle(p1: PoseLandmark, p2: PoseLandmark, p3: PoseLandmark): Double {
+            val x1 = p1.position.x.toDouble()
+            val y1 = p1.position.y.toDouble()
+            val x2 = p2.position.x.toDouble()
+            val y2 = p2.position.y.toDouble()
+            val x3 = p3.position.x.toDouble()
+            val y3 = p3.position.y.toDouble()
 
-        val alignmentOffset = ((hipY - shoulderY) - (ankleY - hipY)) / (ankleY - shoulderY)
+            val radians = atan2(y3 - y2, x3 - x2) - atan2(y1 - y2, x1 - x2)
+            var degrees = Math.toDegrees(radians)
+            if (degrees < 0) degrees += 360.0
+            return if (degrees > 180.0) 360.0 - degrees else degrees
+        }
 
-        val formCorrect = alignmentOffset in -thresholds.maxFormDeviationOffset..thresholds.maxFormDeviationOffset
+        val ls = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER) ?: return
+        val le = pose.getPoseLandmark(PoseLandmark.LEFT_ELBOW) ?: return
+        val lw = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST) ?: return
+        val rs = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER) ?: return
+        val re = pose.getPoseLandmark(PoseLandmark.RIGHT_ELBOW) ?: return
+        val rw = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST) ?: return
 
-        if (state == "UP" && avgElbowAngle <= thresholds.minElbowFlexionForCount) {
-            state = "DOWN"
-        } else if (state == "DOWN" && avgElbowAngle >= thresholds.maxElbowExtensionForCount) {
-            if (formCorrect) {
-                correctCount++
-                alertMessage = "✅ Correcta"
-            } else {
-                incorrectCount++
-                alertMessage = "🟠 Cuerpo torcido"
+        val angleLeft = angle(lw, le, ls)
+        val angleRight = angle(rw, re, rs)
+        val avgElbowAngle = (angleLeft + angleRight) / 2
+
+        when (state) {
+            "up" -> {
+                if (avgElbowAngle <= thresholds.minElbowFlexionForCount) {
+                    state = "down"
+                    lastFeedback = "⬇ Bajando"
+                }
             }
-            state = "UP"
-        } else {
-            if (!formCorrect) {
-                alertMessage = "¡MANTÉN EL CUERPO RECTO!"
-            } else if (avgElbowAngle > 90 && avgElbowAngle < 160) {
-                alertMessage = "¡BAJA MÁS LOS CODOS!"
-            } else {
-                alertMessage = ""
+            "down" -> {
+                if (avgElbowAngle >= thresholds.maxElbowExtensionForCount) {
+                    counter++
+                    state = "up"
+                    lastFeedback = "✔ ¡Bien hecho!"
+                }
             }
         }
 
-        canvas?.let {
-            Utils.drawText(it, "Flexiones correctas: $correctCount", 30f, 80f, Color.GREEN)
-            Utils.drawText(it, "Incorrectas: $incorrectCount", 30f, 130f, Color.RED)
-            Utils.drawText(it, alertMessage, 30f, 180f, Color.YELLOW)
+        for (lm in landmarks) {
+            canvas.drawCircle(sx(lm), sy(lm), 18f, paintPoint)
         }
 
-        return Pair(correctCount, incorrectCount)
+        val connections = listOf(
+            PoseLandmark.LEFT_SHOULDER to PoseLandmark.LEFT_ELBOW,
+            PoseLandmark.LEFT_ELBOW to PoseLandmark.LEFT_WRIST,
+            PoseLandmark.RIGHT_SHOULDER to PoseLandmark.RIGHT_ELBOW,
+            PoseLandmark.RIGHT_ELBOW to PoseLandmark.RIGHT_WRIST,
+            PoseLandmark.LEFT_SHOULDER to PoseLandmark.RIGHT_SHOULDER,
+            PoseLandmark.LEFT_HIP to PoseLandmark.RIGHT_HIP,
+            PoseLandmark.LEFT_SHOULDER to PoseLandmark.LEFT_HIP,
+            PoseLandmark.RIGHT_SHOULDER to PoseLandmark.RIGHT_HIP,
+            PoseLandmark.LEFT_HIP to PoseLandmark.LEFT_KNEE,
+            PoseLandmark.LEFT_KNEE to PoseLandmark.LEFT_ANKLE,
+            PoseLandmark.RIGHT_HIP to PoseLandmark.RIGHT_KNEE,
+            PoseLandmark.RIGHT_KNEE to PoseLandmark.RIGHT_ANKLE
+        )
+        for ((a, b) in connections) {
+            val p1 = pose.getPoseLandmark(a)
+            val p2 = pose.getPoseLandmark(b)
+            if (p1 != null && p2 != null) {
+                canvas.drawLine(sx(p1), sy(p1), sx(p2), sy(p2), paintLine)
+            }
+        }
+
+        drawText(canvas, "CODO IZQ (real): ${angleLeft.toInt()}°", 30f, 60f, Color.CYAN)
+        drawText(canvas, "CODO DER (real): ${angleRight.toInt()}°", 30f, 110f, Color.CYAN)
+        drawText(canvas, "FLEXIONES: $counter", 30f, canvas.height - 140f, Color.GREEN)
+        drawText(canvas, lastFeedback, 30f, canvas.height - 80f, Color.WHITE)
+    }
+
+    private fun drawText(canvas: Canvas, text: String, x: Float, y: Float, color: Int) {
+        paintText.color = color
+        canvas.drawText(text, x, y, paintText)
     }
 }
