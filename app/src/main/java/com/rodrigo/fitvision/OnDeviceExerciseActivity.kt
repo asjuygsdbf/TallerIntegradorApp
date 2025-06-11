@@ -1,29 +1,24 @@
 package com.rodrigo.fitvision
 
+import android.graphics.Bitmap
 import android.os.Bundle
-import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.*
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.pose.PoseDetection
-import com.google.mlkit.vision.pose.PoseDetector
-import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions
-import com.rodrigo.fitvision.core.*
 import com.rodrigo.fitvision.databinding.ActivityCameraTrainingBinding
-import java.util.concurrent.Executors
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 
 class OnDeviceExerciseActivity : AppCompatActivity() {
-    private lateinit var binding: ActivityCameraTrainingBinding
-    private lateinit var cameraProvider: ProcessCameraProvider
-    private lateinit var poseDetector: PoseDetector
-    private var exercise: String = "squats"
 
-    private var pushupProcessor: PushUpProcessor? = null
-    private var squatProcessor: SquatProcessor? = null
-    private var abdominalProcessor: AbdominalProcessor? = null
+    private lateinit var binding: ActivityCameraTrainingBinding
+    private lateinit var exercise: String
+    private val client = OkHttpClient()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,114 +26,64 @@ class OnDeviceExerciseActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         exercise = intent.getStringExtra("exercise") ?: "squats"
-        initProcessors()
-        setupCamera()
 
-        binding.btnStop.setOnClickListener { finish() }
+        binding.btnStop.setOnClickListener {
+            finish()
+        }
 
-        // Redibuja constantemente el overlay cada 100ms
-        val handler = android.os.Handler(mainLooper)
-        val redrawRunnable = object : Runnable {
+        startFrameLoop()
+    }
+
+    private fun startFrameLoop() {
+        val handler = Handler(Looper.getMainLooper())
+        handler.post(object : Runnable {
             override fun run() {
-                binding.overlayView.invalidate()
-                handler.postDelayed(this, 100)
+                captureAndSendFrame()
+                handler.postDelayed(this, 1000) // cada 1 segundo
             }
-        }
-        handler.post(redrawRunnable)
+        })
     }
 
-    private fun initProcessors() {
-        when (exercise) {
-            "pushups" -> {
-            }
-            "squats" -> squatProcessor = SquatProcessor(Thresholds.getSquatThresholds())
-            "abs" -> abdominalProcessor = AbdominalProcessor(Thresholds.getAbdominalThresholds())
-        }
+    private fun captureAndSendFrame() {
+        val bitmap = binding.previewView.bitmap ?: return
+
+        val stream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+        val byteArray = stream.toByteArray()
+
+        sendFrameToBackend(byteArray)
     }
 
-    private fun setupCamera() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        cameraProviderFuture.addListener({
-            cameraProvider = cameraProviderFuture.get()
+    private fun sendFrameToBackend(imageData: ByteArray) {
+        val requestBody = imageData.toRequestBody("image/jpeg".toMediaTypeOrNull())
+        val url = "http://127.0.0.1:5000/analyze?ejercicio=$exercise"
 
-            val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(binding.previewView.surfaceProvider)
-            }
+        val request = Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .build()
 
-            val imageAnalysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-
-            val options = AccuratePoseDetectorOptions.Builder()
-                .setDetectorMode(AccuratePoseDetectorOptions.STREAM_MODE)
-                .build()
-
-            poseDetector = PoseDetection.getClient(options)
-
-            imageAnalysis.setAnalyzer(
-                Executors.newSingleThreadExecutor()
-            ) { imageProxy ->
-                @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
-                val mediaImage = imageProxy.image
-                if (mediaImage != null) {
-                    val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-                    val image = InputImage.fromMediaImage(mediaImage, rotationDegrees)
-
-                    poseDetector.process(image)
-                        .addOnSuccessListener { pose ->
-                            Log.d("POSE", "Landmarks detectados: ${pose.allPoseLandmarks.size}")
-
-                            // Obtenemos dimensiones del frame
-                            val frameWidth = image.width.toFloat()
-                            val frameHeight = image.height.toFloat()
-
-                            // Inicializar procesador con dimensiones reales
-                            if (exercise == "pushups" && pushupProcessor == null) {
-                                pushupProcessor = PushUpProcessor(
-                                    Thresholds.getPushUpThresholds(),
-                                    frameWidth,
-                                    frameHeight
-                                )
-                            }
-
-                            binding.overlayView.setDrawCallback { canvas ->
-                                when (exercise) {
-                                    "pushups" -> pushupProcessor?.process(pose, canvas)
-                                    "squats" -> squatProcessor?.process(pose, canvas)
-                                    "abs" -> abdominalProcessor?.process(pose, canvas)
-                                }
-                            }
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e("PoseDetection", "Error detecting pose", e)
-                        }
-                        .addOnCompleteListener {
-                            imageProxy.close()
-                        }
-                } else {
-                    imageProxy.close()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    Toast.makeText(this@OnDeviceExerciseActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
 
-            try {
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
-                    this,
-                    CameraSelector.DEFAULT_FRONT_CAMERA,
-                    preview,
-                    imageAnalysis
-                )
-            } catch (e: Exception) {
-                Log.e("CameraSetup", "Error binding camera use cases", e)
-                Toast.makeText(this, "Error al iniciar cámara", Toast.LENGTH_SHORT).show()
-            }
-        }, ContextCompat.getMainExecutor(this))
-    }
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    val responseBody = it.body?.string()
+                    val feedback = try {
+                        JSONObject(responseBody ?: "").optString("feedback", "Sin respuesta")
+                    } catch (e: Exception) {
+                        "Error en JSON"
+                    }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        if (::poseDetector.isInitialized) {
-            poseDetector.close()
-        }
+                    runOnUiThread {
+                        Toast.makeText(this@OnDeviceExerciseActivity, feedback, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        })
     }
 }
