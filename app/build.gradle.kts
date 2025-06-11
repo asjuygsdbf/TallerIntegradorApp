@@ -16,10 +16,12 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
     buildFeatures {
         viewBinding = true
         dataBinding = true
     }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -29,36 +31,40 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     kotlinOptions {
         jvmTarget = "11"
     }
 }
 
 dependencies {
+    // UI y utilitarios
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
 
+    // Cámara (solo preview, sin análisis)
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
-    implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
+    // Networking
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.scalars)
     implementation(libs.okhttp)
 
+    // Corrutinas (opcional, para futuros usos)
     implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.mlkitpose)
-    implementation(libs.mlkitpose.base)
-    implementation(libs.mlkitpose.common)
+
+    // Tests
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
 }
